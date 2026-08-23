@@ -594,13 +594,15 @@ function createTornadoMesh() {
     const scale = 1.3 + Math.random() * 1.2;
     puffSprite.scale.set(scale, scale, 1);
     group.add(puffSprite);
+    const baseY = pickPuffHeight();
+    const radius = baseY > 12 ? 7 + Math.random() * 9 : 4 + Math.random() * 5;
     puffs.push({
       sprite: puffSprite,
       angle: Math.random() * Math.PI * 2,
-      radius: 4 + Math.random() * 5,
+      radius,
       orbitSpeed: 1.5 + Math.random() * 1.5,
       bobOffset: Math.random() * Math.PI * 2,
-      baseY: pickPuffHeight(),
+      baseY,
     });
   }
 
