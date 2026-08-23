@@ -568,6 +568,13 @@ function createSmokeTexture() {
   return texture;
 }
 
+function pickPuffHeight() {
+  const roll = Math.random();
+  if (roll < 0.55) return 0.2 + Math.random() * 1.4; // ground-hugging skirt
+  if (roll < 0.8) return 2 + Math.random() * 8; // debris lifted mid-air
+  return 13 + Math.random() * 5; // smoke swirling above the funnel's top
+}
+
 function createTornadoMesh() {
   const material = new THREE.SpriteMaterial({ map: tornadoTexture, transparent: true, depthWrite: false });
   const sprite = new THREE.Sprite(material);
@@ -593,7 +600,7 @@ function createTornadoMesh() {
       radius: 4 + Math.random() * 5,
       orbitSpeed: 1.5 + Math.random() * 1.5,
       bobOffset: Math.random() * Math.PI * 2,
-      baseY: Math.random() < 0.7 ? 0.2 + Math.random() * 1.4 : 2 + Math.random() * 8,
+      baseY: pickPuffHeight(),
     });
   }
 
