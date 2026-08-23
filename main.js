@@ -24,6 +24,7 @@ const SHOP_DOUBLE_ELEMENT_COST = 500;
 const SHOP_JUMP_COST = 100;
 const SHOP_DOUBLE_JUMP_COST = 300;
 const SHOP_MINION_COST = 500;
+const SHOP_SWIMMING_COST = 250;
 const JUMP_SPEED = 6;
 const GRAVITY = 18;
 
@@ -575,7 +576,7 @@ function openChat() {
   const input = document.getElementById('chat-input');
   document.getElementById('chat').classList.remove('hidden');
   input.value = '';
-  input.focus();
+  requestAnimationFrame(() => input.focus());
 }
 
 function closeChat(shouldSubmit) {
@@ -628,14 +629,15 @@ function setMoveKey(code, isDown) {
 }
 
 function tryOpenShop() {
-  if (gameState !== 'PLAYING' || !nearShop) return;
+  if ((gameState !== 'PLAYING' && gameState !== 'IDLE') || !nearShop) return;
+  previousState = gameState;
   gameState = 'SHOP';
   if (document.pointerLockElement) document.exitPointerLock();
   updateUI();
 }
 
 function closeShop() {
-  gameState = 'PLAYING';
+  gameState = previousState === 'IDLE' ? 'IDLE' : 'PLAYING';
   updateUI();
   lockPointer();
 }
@@ -659,7 +661,10 @@ function updateMovement(delta) {
   camera.position.addScaledVector(step, getEffectiveMoveSpeed() * delta);
   camera.position.x = THREE.MathUtils.clamp(camera.position.x, -MAP_HALF_SIZE, MAP_HALF_SIZE);
   camera.position.z = THREE.MathUtils.clamp(camera.position.z, -MAP_HALF_SIZE, MAP_HALF_SIZE);
-  [camera.position.x, camera.position.z] = pushOutsideLake(camera.position.x, camera.position.z);
+  const canSwim = upgrades.swimming && playerChosenType === 'water';
+  if (!canSwim) {
+    [camera.position.x, camera.position.z] = pushOutsideLake(camera.position.x, camera.position.z);
+  }
   [camera.position.x, camera.position.z] = resolveHouseCollision(camera.position.x, camera.position.z);
 
   if (upgrades.canJump) {
@@ -676,7 +681,11 @@ function updateMovement(delta) {
     usedDoubleJump = false;
   }
 
-  camera.position.y = terrainHeight(camera.position.x, camera.position.z) + EYE_HEIGHT + playerJumpOffset;
+  let groundY = terrainHeight(camera.position.x, camera.position.z) + EYE_HEIGHT + playerJumpOffset;
+  if (canSwim && Math.hypot(camera.position.x, camera.position.z) < LAKE_RADIUS) {
+    groundY = Math.max(groundY, LAKE_WATER_LEVEL + 0.4);
+  }
+  camera.position.y = groundY;
 }
 
 function tryJump() {
@@ -1251,9 +1260,10 @@ function loadUpgrades() {
       canJump: Boolean(parsed?.canJump),
       doubleJump: Boolean(parsed?.doubleJump),
       minion: Boolean(parsed?.minion),
+      swimming: Boolean(parsed?.swimming),
     };
   } catch {
-    return { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false };
+    return { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false };
   }
 }
 
@@ -1330,7 +1340,7 @@ function restartGame() {
   if (!confirm('Restart the game? This resets your coins and shop upgrades.')) return;
   coins = 0;
   saveCoins();
-  upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false };
+  upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false };
   saveUpgrades();
   refreshCoinDisplay();
   clearNPCs();
@@ -1373,6 +1383,10 @@ function buyUpgrade(kind) {
     if (!upgrades.canJump || upgrades.minion || coins < SHOP_MINION_COST) return;
     coins -= SHOP_MINION_COST;
     upgrades.minion = true;
+  } else if (kind === 'swimming') {
+    if (playerChosenType !== 'water' || upgrades.swimming || coins < SHOP_SWIMMING_COST) return;
+    coins -= SHOP_SWIMMING_COST;
+    upgrades.swimming = true;
   }
   saveCoins();
   saveUpgrades();
@@ -1531,6 +1545,11 @@ function renderOverlayContent() {
               ? `
           <button data-action="buy" data-kind="doubleJump" ${upgrades.doubleJump ? 'disabled' : ''}>${upgrades.doubleJump ? 'Double Jump — Owned' : 'Double Jump — 300 🪙'}</button>
           <button data-action="buy" data-kind="minion" ${upgrades.minion ? 'disabled' : ''}>${upgrades.minion ? 'Minion Helper — Owned' : 'Minion Helper — 500 🪙'}</button>`
+              : ''
+          }
+          ${
+            playerChosenType === 'water'
+              ? `<button data-action="buy" data-kind="swimming" ${upgrades.swimming ? 'disabled' : ''}>${upgrades.swimming ? 'Swimming — Owned' : 'Swimming — 250 🪙'}</button>`
               : ''
           }
           <button data-action="close-shop">Leave Shop</button>
