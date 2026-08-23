@@ -46,7 +46,6 @@ Then open http://localhost:8000 in a browser (Chrome/Firefox/Safari).
 
 ## Credits
 
-- Flame, water, wave, and tornado sprites (`assets/flame.svg`,
-  `assets/water.svg`, `assets/wave.svg`, `assets/tornado.svg`):
-  [Twemoji](https://github.com/jdecked/twemoji), licensed under
-  [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- Flame, water, and wave sprites (`assets/flame.svg`, `assets/water.svg`,
+  `assets/wave.svg`): [Twemoji](https://github.com/jdecked/twemoji),
+  licensed under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).

@@ -32,7 +32,6 @@ const TORNADO_RADIUS = 4;
 const TORNADO_KNOCKBACK_FORCE = 60;
 const TORNADO_KNOCKBACK_COOLDOWN = 1.5;
 let tornado = null;
-let tornadoTexture = null;
 let smokeTexture;
 const knockbackVelocity = { x: 0, z: 0 };
 
@@ -251,7 +250,6 @@ async function init() {
   flameTexture = await loadFlameTexture();
   waterTexture = await loadWaterTexture();
   waveTexture = await loadWaveTexture();
-  tornadoTexture = await loadTornadoTexture();
 
   initGround();
   initLake();
@@ -538,20 +536,6 @@ function spawnGateBarrier() {
   scene.add(gateBarrier);
 }
 
-async function loadTornadoTexture() {
-  const img = await loadImage('assets/tornado.svg');
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, size, size);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
 function createSmokeTexture() {
   const size = 64;
   const canvas = document.createElement('canvas');
@@ -576,14 +560,7 @@ function pickPuffHeight() {
 }
 
 function createTornadoMesh() {
-  const material = new THREE.SpriteMaterial({ map: tornadoTexture, transparent: true, depthWrite: false });
-  const sprite = new THREE.Sprite(material);
-  const aspect = tornadoTexture.image.width / tornadoTexture.image.height;
-  const spriteHeight = 16;
-  sprite.scale.set(spriteHeight * aspect, spriteHeight, 1);
-  sprite.position.y = spriteHeight / 2;
   const group = new THREE.Group();
-  group.add(sprite);
 
   if (!smokeTexture) smokeTexture = createSmokeTexture();
   const puffCount = 1504;
@@ -595,7 +572,11 @@ function createTornadoMesh() {
     puffSprite.scale.set(scale, scale, 1);
     group.add(puffSprite);
     const baseY = pickPuffHeight();
-    const radius = baseY > 12 ? 7 + Math.random() * 9 : 4 + Math.random() * 5;
+    // Funnel taper: narrow ring near the ground, flaring out wide up top.
+    const heightFactor = THREE.MathUtils.clamp(baseY / 18, 0, 1);
+    const minRadius = THREE.MathUtils.lerp(0.4, 7, heightFactor);
+    const maxRadius = THREE.MathUtils.lerp(1.5, 16, heightFactor);
+    const radius = minRadius + Math.random() * (maxRadius - minRadius);
     puffs.push({
       sprite: puffSprite,
       angle: Math.random() * Math.PI * 2,
@@ -606,7 +587,7 @@ function createTornadoMesh() {
     });
   }
 
-  return { group, sprite, puffs };
+  return { group, puffs };
 }
 
 function pickTornadoTarget() {
@@ -621,9 +602,9 @@ function pickTornadoTarget() {
 }
 
 function initTornado() {
-  const { group, sprite, puffs } = createTornadoMesh();
+  const { group, puffs } = createTornadoMesh();
   scene.add(group);
-  tornado = { group, sprite, puffs, targetX: 0, targetZ: 0, lastHitTime: -Infinity };
+  tornado = { group, puffs, targetX: 0, targetZ: 0, lastHitTime: -Infinity };
   pickTornadoTarget();
   group.position.set(tornado.targetX, terrainHeight(tornado.targetX, tornado.targetZ), tornado.targetZ);
   pickTornadoTarget();
@@ -650,8 +631,6 @@ function updateTornado(delta, elapsed) {
     tornado.group.position.z += (dz / dist) * speed * delta;
   }
   tornado.group.position.y = terrainHeight(tornado.group.position.x, tornado.group.position.z);
-  tornado.sprite.position.y = 8 + Math.sin(elapsed * 1.2) * 0.8;
-  tornado.sprite.material.opacity = 0.95 + Math.sin(elapsed * 0.8) * 0.05;
 
   for (const puff of tornado.puffs) {
     puff.angle += puff.orbitSpeed * delta;
