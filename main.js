@@ -28,17 +28,18 @@ const SHOP_SWIMMING_COST = 250;
 const TORNADO_SPEED = 3;
 const TORNADO_CHASE_SPEED = 7;
 const TORNADO_DETECT_RADIUS = 30;
-const TORNADO_SPIN_SPEED = 3.5;
 const TORNADO_RADIUS = 4;
 const TORNADO_KNOCKBACK_FORCE = 42;
 const TORNADO_KNOCKBACK_COOLDOWN = 1.5;
 let tornado = null;
 let tornadoTexture = null;
+let smokeTexture;
 const knockbackVelocity = { x: 0, z: 0 };
 
 const GATE_COST = 1000;
 const GATE_X = MAP_HALF_SIZE;
 const GATE_INTERACT_DISTANCE = 4;
+const WALL_CLEAR_HEIGHT = 9;
 const DESERT_WIDTH = 150;
 let nearGate = false;
 let gateBarrier = null;
@@ -551,6 +552,22 @@ async function loadTornadoTexture() {
   return texture;
 }
 
+function createSmokeTexture() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(190,190,190,0.75)');
+  gradient.addColorStop(1, 'rgba(190,190,190,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function createTornadoMesh() {
   const material = new THREE.SpriteMaterial({ map: tornadoTexture, transparent: true, depthWrite: false });
   const sprite = new THREE.Sprite(material);
@@ -560,7 +577,27 @@ function createTornadoMesh() {
   sprite.position.y = spriteHeight / 2;
   const group = new THREE.Group();
   group.add(sprite);
-  return { group, sprite };
+
+  if (!smokeTexture) smokeTexture = createSmokeTexture();
+  const puffCount = 8;
+  const puffs = [];
+  for (let i = 0; i < puffCount; i++) {
+    const puffMaterial = new THREE.SpriteMaterial({ map: smokeTexture, transparent: true, depthWrite: false });
+    const puffSprite = new THREE.Sprite(puffMaterial);
+    const scale = 1.3 + Math.random() * 1.2;
+    puffSprite.scale.set(scale, scale, 1);
+    group.add(puffSprite);
+    puffs.push({
+      sprite: puffSprite,
+      angle: Math.random() * Math.PI * 2,
+      radius: 1.5 + Math.random() * 2,
+      orbitSpeed: 0.4 + Math.random() * 0.4,
+      bobOffset: Math.random() * Math.PI * 2,
+      baseY: 0.3 + Math.random() * 1.2,
+    });
+  }
+
+  return { group, sprite, puffs };
 }
 
 function pickTornadoTarget() {
@@ -575,9 +612,9 @@ function pickTornadoTarget() {
 }
 
 function initTornado() {
-  const { group, sprite } = createTornadoMesh();
+  const { group, sprite, puffs } = createTornadoMesh();
   scene.add(group);
-  tornado = { group, sprite, targetX: 0, targetZ: 0, lastHitTime: -Infinity };
+  tornado = { group, sprite, puffs, targetX: 0, targetZ: 0, lastHitTime: -Infinity };
   pickTornadoTarget();
   group.position.set(tornado.targetX, terrainHeight(tornado.targetX, tornado.targetZ), tornado.targetZ);
   pickTornadoTarget();
@@ -604,7 +641,16 @@ function updateTornado(delta, elapsed) {
     tornado.group.position.z += (dz / dist) * speed * delta;
   }
   tornado.group.position.y = terrainHeight(tornado.group.position.x, tornado.group.position.z);
-  tornado.sprite.material.rotation += TORNADO_SPIN_SPEED * delta;
+  tornado.sprite.position.y = 8 + Math.sin(elapsed * 1.2) * 0.8;
+
+  for (const puff of tornado.puffs) {
+    puff.angle += puff.orbitSpeed * delta;
+    puff.sprite.position.set(
+      Math.cos(puff.angle) * puff.radius,
+      puff.baseY + Math.sin(elapsed * 1.5 + puff.bobOffset) * 0.3,
+      Math.sin(puff.angle) * puff.radius
+    );
+  }
 
   if (distToPlayerXZ < TORNADO_RADIUS && elapsed - tornado.lastHitTime > TORNADO_KNOCKBACK_COOLDOWN) {
     tornado.lastHitTime = elapsed;
@@ -967,9 +1013,15 @@ function updateMovement(delta) {
   knockbackVelocity.x *= 0.9;
   knockbackVelocity.z *= 0.9;
 
-  const maxX = upgrades.desertGate ? MAP_HALF_SIZE + DESERT_WIDTH : MAP_HALF_SIZE;
-  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -MAP_HALF_SIZE, maxX);
-  camera.position.z = THREE.MathUtils.clamp(camera.position.z, -MAP_HALF_SIZE, MAP_HALF_SIZE);
+  // Only block passage near ground level — the boundary/gate walls are a
+  // finite height, so a player launched high enough (e.g. by the tornado)
+  // should be able to sail over them instead of hitting an invisible
+  // ceiling that extends infinitely upward.
+  if (playerJumpOffset < WALL_CLEAR_HEIGHT) {
+    const maxX = upgrades.desertGate ? MAP_HALF_SIZE + DESERT_WIDTH : MAP_HALF_SIZE;
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -MAP_HALF_SIZE, maxX);
+    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -MAP_HALF_SIZE, MAP_HALF_SIZE);
+  }
   const canSwim = upgrades.swimming && playerChosenType === 'water';
   if (!canSwim) {
     [camera.position.x, camera.position.z] = pushOutsideLake(camera.position.x, camera.position.z);
