@@ -579,7 +579,7 @@ function createTornadoMesh() {
   group.add(sprite);
 
   if (!smokeTexture) smokeTexture = createSmokeTexture();
-  const puffCount = 300;
+  const puffCount = 1504;
   const puffs = [];
   for (let i = 0; i < puffCount; i++) {
     const puffMaterial = new THREE.SpriteMaterial({ map: smokeTexture, transparent: true, depthWrite: false });
