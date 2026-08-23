@@ -554,9 +554,9 @@ function createSmokeTexture() {
 
 function pickPuffHeight() {
   const roll = Math.random();
-  if (roll < 0.55) return 0.2 + Math.random() * 1.4; // ground-hugging skirt
-  if (roll < 0.8) return 2 + Math.random() * 8; // debris lifted mid-air
-  return 13 + Math.random() * 5; // smoke swirling above the funnel's top
+  if (roll < 0.45) return 0.2 + Math.random() * 1.4; // ground-hugging skirt
+  if (roll < 0.65) return 2 + Math.random() * 8; // debris lifted mid-air
+  return 13 + Math.random() * 11; // smoke swirling above the funnel's top
 }
 
 function createTornadoMesh() {
@@ -573,7 +573,7 @@ function createTornadoMesh() {
     group.add(puffSprite);
     const baseY = pickPuffHeight();
     // Funnel taper: narrow ring near the ground, flaring out wide up top.
-    const heightFactor = THREE.MathUtils.clamp(baseY / 18, 0, 1);
+    const heightFactor = THREE.MathUtils.clamp(baseY / 24, 0, 1);
     const minRadius = THREE.MathUtils.lerp(0.4, 7, heightFactor);
     const maxRadius = THREE.MathUtils.lerp(1.5, 16, heightFactor);
     const radius = minRadius + Math.random() * (maxRadius - minRadius);
