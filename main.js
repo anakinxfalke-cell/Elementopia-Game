@@ -29,7 +29,7 @@ const TORNADO_SPEED = 3;
 const TORNADO_CHASE_SPEED = 7;
 const TORNADO_DETECT_RADIUS = 30;
 const TORNADO_RADIUS = 4;
-const TORNADO_KNOCKBACK_FORCE = 42;
+const TORNADO_KNOCKBACK_FORCE = 60;
 const TORNADO_KNOCKBACK_COOLDOWN = 1.5;
 let tornado = null;
 let tornadoTexture = null;
@@ -579,7 +579,7 @@ function createTornadoMesh() {
   group.add(sprite);
 
   if (!smokeTexture) smokeTexture = createSmokeTexture();
-  const puffCount = 8;
+  const puffCount = 30;
   const puffs = [];
   for (let i = 0; i < puffCount; i++) {
     const puffMaterial = new THREE.SpriteMaterial({ map: smokeTexture, transparent: true, depthWrite: false });
