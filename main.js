@@ -22,6 +22,8 @@ const SHOP_SPEED_BOOST_COST = 200;
 const SHOP_SPEED_BOOST_MULTIPLIER = 1.1;
 const SHOP_DOUBLE_ELEMENT_COST = 500;
 const SHOP_JUMP_COST = 100;
+const SHOP_DOUBLE_JUMP_COST = 300;
+const SHOP_MINION_COST = 500;
 const JUMP_SPEED = 6;
 const GRAVITY = 18;
 
@@ -188,7 +190,7 @@ let activeItems = [];
 let npcs = [];
 let running = true;
 
-let gameState = 'SELECT'; // SELECT | PLAYING | PAUSED | SETTINGS | WON | LOST | QUIT
+let gameState = 'WELCOME'; // WELCOME | IDLE | SELECT | PLAYING | PAUSED | SETTINGS | SHOP | WON | LOST | QUIT
 let previousState = 'SELECT';
 let playerChosenType = null;
 let playerRemaining = 0;
@@ -196,8 +198,13 @@ let lastResultNpc = null;
 let coins = loadCoins();
 let upgrades = loadUpgrades();
 let nearShop = false;
+let chatOpen = false;
 let playerJumpOffset = 0;
 let playerVerticalVelocity = 0;
+let usedDoubleJump = false;
+let minion = null;
+let playerBody = null;
+const PLAYER_SKIN_COLOR = 0xf0c090;
 
 let mouseSensitivity = DEFAULT_MOUSE_SENSITIVITY;
 let moveSpeed = DEFAULT_MOVE_SPEED;
@@ -221,6 +228,7 @@ async function init() {
   initLake();
   spawnElementHouses();
   spawnGiantTrees();
+  initPlayerBody();
   initPointerLock();
   bindKeys();
   bindTopBar();
@@ -518,10 +526,12 @@ function onMouseMove(event) {
 }
 
 function onPointerLockChange() {
-  // Ignore unlocks we triggered ourselves when a round already ended or a menu opened —
-  // gameState is switched away from PLAYING before those calls, so this only fires
-  // for an unexpected/user-driven unlock (Esc key) while actually playing.
-  if (document.pointerLockElement !== renderer.domElement && gameState === 'PLAYING') {
+  // Ignore unlocks we triggered ourselves when a round already ended, a menu opened, or
+  // chat was opened — gameState/chatOpen is switched before those calls, so this only fires
+  // for an unexpected/user-driven unlock (Esc key) while actually playing or roaming.
+  if (chatOpen) return;
+  if (document.pointerLockElement !== renderer.domElement && (gameState === 'PLAYING' || gameState === 'IDLE')) {
+    previousState = gameState;
     gameState = 'PAUSED';
     updateUI();
   }
@@ -532,8 +542,76 @@ function lockPointer() {
 }
 
 function bindKeys() {
-  document.addEventListener('keydown', (event) => setMoveKey(event.code, true));
-  document.addEventListener('keyup', (event) => setMoveKey(event.code, false));
+  document.addEventListener('keydown', (event) => {
+    if (chatOpen) {
+      if (event.code === 'Escape') closeChat(false);
+      return;
+    }
+    if (event.code === 'KeyT' && (gameState === 'PLAYING' || gameState === 'IDLE')) {
+      event.preventDefault();
+      openChat();
+      return;
+    }
+    setMoveKey(event.code, true);
+  });
+  document.addEventListener('keyup', (event) => {
+    if (chatOpen) return;
+    setMoveKey(event.code, false);
+  });
+
+  const chatInput = document.getElementById('chat-input');
+  chatInput.addEventListener('keydown', (event) => {
+    event.stopPropagation();
+    if (event.code === 'Enter') submitChat();
+    else if (event.code === 'Escape') closeChat(false);
+  });
+}
+
+function openChat() {
+  chatOpen = true;
+  move.forward = move.backward = move.left = move.right = false;
+  if (document.pointerLockElement) document.exitPointerLock();
+  const input = document.getElementById('chat-input');
+  document.getElementById('chat').classList.remove('hidden');
+  input.value = '';
+  input.focus();
+}
+
+function closeChat(shouldSubmit) {
+  const input = document.getElementById('chat-input');
+  if (shouldSubmit) {
+    const text = input.value.trim();
+    if (text && !tryHandleChatCommand(text)) addChatLine(`You: ${text}`);
+  }
+  chatOpen = false;
+  document.getElementById('chat').classList.add('hidden');
+  input.blur();
+  if (gameState === 'PLAYING' || gameState === 'IDLE') lockPointer();
+}
+
+function tryHandleChatCommand(text) {
+  const match = text.match(/^\/player give coins\/:\/(\d+)\/:\/coins\/$/);
+  if (!match) return false;
+  const amount = parseInt(match[1], 10);
+  coins += amount;
+  saveCoins();
+  refreshCoinDisplay();
+  addChatLine(`✨ +${amount} 🪙`);
+  return true;
+}
+
+function submitChat() {
+  closeChat(true);
+}
+
+function addChatLine(text) {
+  const log = document.getElementById('chat-log');
+  const line = document.createElement('div');
+  line.className = 'chat-line';
+  line.textContent = text;
+  log.appendChild(line);
+  while (log.children.length > 6) log.removeChild(log.firstChild);
+  setTimeout(() => line.remove(), 8000);
 }
 
 function setMoveKey(code, isDown) {
@@ -589,18 +667,25 @@ function updateMovement(delta) {
     if (playerJumpOffset <= 0) {
       playerJumpOffset = 0;
       playerVerticalVelocity = 0;
+      usedDoubleJump = false;
     }
   } else {
     playerJumpOffset = 0;
     playerVerticalVelocity = 0;
+    usedDoubleJump = false;
   }
 
   camera.position.y = terrainHeight(camera.position.x, camera.position.z) + EYE_HEIGHT + playerJumpOffset;
 }
 
 function tryJump() {
-  if (upgrades.canJump && gameState === 'PLAYING' && playerJumpOffset <= 0) {
+  if (!upgrades.canJump || (gameState !== 'PLAYING' && gameState !== 'IDLE')) return;
+  if (playerJumpOffset <= 0) {
     playerVerticalVelocity = JUMP_SPEED;
+    usedDoubleJump = false;
+  } else if (upgrades.doubleJump && !usedDoubleJump) {
+    playerVerticalVelocity = JUMP_SPEED;
+    usedDoubleJump = true;
   }
 }
 
@@ -907,13 +992,12 @@ function createMinecraftCharacter(color) {
 
   const eyeMaterial = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.35) });
   const eyeSize = NPC_HEAD_SIZE * 0.15;
-  const eyeY = headY + NPC_HEAD_SIZE * 0.05;
   const eyeZ = NPC_HEAD_SIZE / 2 + 0.01;
   const eyeSpacing = NPC_HEAD_SIZE * 0.22;
   for (const side of [-1, 1]) {
     const eye = new THREE.Mesh(new THREE.BoxGeometry(eyeSize, eyeSize, 0.02), eyeMaterial);
-    eye.position.set(side * eyeSpacing, eyeY, eyeZ);
-    group.add(eye);
+    eye.position.set(side * eyeSpacing, NPC_HEAD_SIZE * 0.05, eyeZ);
+    head.add(eye);
   }
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(NPC_BODY_WIDTH, NPC_BODY_HEIGHT, NPC_BODY_DEPTH), clothesMaterial);
@@ -931,7 +1015,7 @@ function createMinecraftCharacter(color) {
 
   group.scale.setScalar(NPC_SCALE);
 
-  return { group, leftArm, rightArm, leftLeg, rightLeg };
+  return { group, head, body, leftArm, rightArm, leftLeg, rightLeg };
 }
 
 function createNPC(typeId) {
@@ -977,9 +1061,69 @@ function setNPCWalkPose(npc, swing) {
   npc.rightLeg.rotation.x = swing;
 }
 
+function initPlayerBody() {
+  const character = createMinecraftCharacter(PLAYER_SKIN_COLOR);
+  character.group.remove(character.head);
+  character.group.remove(character.body);
+  scene.add(character.group);
+  playerBody = { ...character, walkPhase: 0 };
+}
+
+function updatePlayerBody(delta) {
+  if (!playerBody) return;
+  playerBody.group.position.set(
+    camera.position.x,
+    terrainHeight(camera.position.x, camera.position.z) + NPC_CENTER_OFFSET * NPC_SCALE,
+    camera.position.z
+  );
+  playerBody.group.rotation.y = yaw;
+
+  const isMoving = move.forward || move.backward || move.left || move.right;
+  if (isMoving) {
+    playerBody.walkPhase += delta * getEffectiveMoveSpeed() * NPC_WALK_CYCLE_SPEED * 0.3;
+    setNPCWalkPose(playerBody, Math.sin(playerBody.walkPhase) * NPC_WALK_SWING);
+  } else {
+    setNPCWalkPose(playerBody, 0);
+  }
+}
+
 function clearNPCs() {
   for (const npc of npcs) scene.remove(npc.mesh);
   npcs = [];
+}
+
+function clearMinion() {
+  if (minion) scene.remove(minion.mesh);
+  minion = null;
+}
+
+function updateMinion(delta) {
+  if (!minion || gameState !== 'PLAYING') return;
+  if (!minion.targetItem) {
+    minion.targetItem = findNearestItem(minion.mesh.position, minion.assignedType);
+    if (!minion.targetItem) return;
+  }
+  const targetPos = minion.targetItem.object.position;
+  const dx = targetPos.x - minion.mesh.position.x;
+  const dz = targetPos.z - minion.mesh.position.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < NPC_PICKUP_RADIUS) {
+    setNPCWalkPose(minion, 0);
+    removeItem(minion.targetItem);
+    minion.targetItem = null;
+    playerRemaining = Math.max(0, playerRemaining - (upgrades.doubleElement ? 2 : 1));
+    updateHUD();
+    if (playerRemaining === 0) triggerRoundWon();
+  } else {
+    minion.mesh.position.x += (dx / dist) * minion.speed * delta;
+    minion.mesh.position.z += (dz / dist) * minion.speed * delta;
+    [minion.mesh.position.x, minion.mesh.position.z] = pushOutsideLake(minion.mesh.position.x, minion.mesh.position.z);
+    [minion.mesh.position.x, minion.mesh.position.z] = resolveHouseCollision(minion.mesh.position.x, minion.mesh.position.z);
+    minion.mesh.position.y = terrainHeight(minion.mesh.position.x, minion.mesh.position.z) + NPC_CENTER_OFFSET * NPC_SCALE;
+    minion.walkPhase += delta * minion.speed * NPC_WALK_CYCLE_SPEED;
+    setNPCWalkPose(minion, Math.sin(minion.walkPhase) * NPC_WALK_SWING);
+    turnToward(minion, Math.atan2(dx / dist, dz / dist), delta);
+  }
 }
 
 function findNearestItem(position, typeId) {
@@ -1049,6 +1193,9 @@ function startRound(typeId) {
   const otherTypes = shuffle(ITEM_TYPES.map((t) => t.id).filter((id) => id !== typeId));
   npcs = otherTypes.map((id) => createNPC(id));
 
+  clearMinion();
+  if (upgrades.minion) minion = createNPC(typeId);
+
   spawnItems();
 
   camera.position.set(0, terrainHeight(0, SPAWN_Z) + EYE_HEIGHT, SPAWN_Z);
@@ -1096,9 +1243,11 @@ function loadUpgrades() {
       speedBoostLevel: Number.isFinite(parsed?.speedBoostLevel) ? parsed.speedBoostLevel : 0,
       doubleElement: Boolean(parsed?.doubleElement),
       canJump: Boolean(parsed?.canJump),
+      doubleJump: Boolean(parsed?.doubleJump),
+      minion: Boolean(parsed?.minion),
     };
   } catch {
-    return { speedBoostLevel: 0, doubleElement: false, canJump: false };
+    return { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false };
   }
 }
 
@@ -1135,11 +1284,18 @@ function updateHUD() {
 // --- Top bar (settings / fullscreen), always available ---
 
 function bindTopBar() {
+  document.getElementById('battle-btn').addEventListener('click', goToSelect);
   document.getElementById('settings-btn').addEventListener('click', openSettings);
   document.getElementById('fullscreen-btn').addEventListener('click', () => {
     toggleFullscreen();
     updateUI();
   });
+}
+
+function goToSelect() {
+  gameState = 'SELECT';
+  if (document.pointerLockElement) document.exitPointerLock();
+  updateUI();
 }
 
 function toggleFullscreen() {
@@ -1157,21 +1313,22 @@ function openSettings() {
 function closeSettings() {
   gameState = previousState;
   updateUI();
-  if (gameState === 'PLAYING') lockPointer();
+  if (gameState === 'PLAYING' || gameState === 'IDLE') lockPointer();
 }
 
 function restartGame() {
   if (!confirm('Restart the game? This resets your coins and shop upgrades.')) return;
   coins = 0;
   saveCoins();
-  upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false };
+  upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false };
   saveUpgrades();
   refreshCoinDisplay();
   clearNPCs();
+  clearMinion();
   for (const item of activeItems) scene.remove(item.object);
   activeItems = [];
   playerChosenType = null;
-  gameState = 'SELECT';
+  gameState = 'WELCOME';
   updateUI();
 }
 
@@ -1188,6 +1345,14 @@ function buyUpgrade(kind) {
     if (upgrades.canJump || coins < SHOP_JUMP_COST) return;
     coins -= SHOP_JUMP_COST;
     upgrades.canJump = true;
+  } else if (kind === 'doubleJump') {
+    if (!upgrades.canJump || upgrades.doubleJump || coins < SHOP_DOUBLE_JUMP_COST) return;
+    coins -= SHOP_DOUBLE_JUMP_COST;
+    upgrades.doubleJump = true;
+  } else if (kind === 'minion') {
+    if (!upgrades.canJump || upgrades.minion || coins < SHOP_MINION_COST) return;
+    coins -= SHOP_MINION_COST;
+    upgrades.minion = true;
   }
   saveCoins();
   saveUpgrades();
@@ -1229,8 +1394,13 @@ function handleOverlayAction(action, el) {
     case 'start-round':
       startRound(el.dataset.type);
       break;
+    case 'start-explore':
+      gameState = 'IDLE';
+      updateUI();
+      lockPointer();
+      break;
     case 'resume':
-      gameState = 'PLAYING';
+      gameState = previousState === 'IDLE' ? 'IDLE' : 'PLAYING';
       updateUI();
       lockPointer();
       break;
@@ -1256,7 +1426,7 @@ function handleOverlayAction(action, el) {
       updateUI();
       break;
     case 'reopen':
-      gameState = 'SELECT';
+      gameState = 'WELCOME';
       running = true;
       requestAnimationFrame(animate);
       updateUI();
@@ -1273,13 +1443,21 @@ function handleOverlayAction(action, el) {
 function updateUI() {
   document.getElementById('hud').classList.toggle('hidden', gameState !== 'PLAYING');
   const overlay = document.getElementById('overlay');
-  const isPlaying = gameState === 'PLAYING';
-  overlay.classList.toggle('hidden', isPlaying);
-  overlay.innerHTML = isPlaying ? '' : renderOverlayContent();
+  const isActive = gameState === 'PLAYING' || gameState === 'IDLE';
+  overlay.classList.toggle('hidden', isActive);
+  overlay.innerHTML = isActive ? '' : renderOverlayContent();
 }
 
 function renderOverlayContent() {
   switch (gameState) {
+    case 'WELCOME':
+      return `
+        <div class="panel">
+          <h1>Elementopia</h1>
+          <p>Explore the world freely. Start a round any time from the
+          ⚔️ button in the top-right corner.</p>
+          <button data-action="start-explore">Click to Explore</button>
+        </div>`;
     case 'SELECT':
       return `
         <div class="panel">
@@ -1325,6 +1503,13 @@ function renderOverlayContent() {
           <button data-action="buy" data-kind="speed">+10% Speed — 200 🪙 (Lv. ${upgrades.speedBoostLevel})</button>
           <button data-action="buy" data-kind="double" ${upgrades.doubleElement ? 'disabled' : ''}>${upgrades.doubleElement ? 'Elements Count Double — Owned' : 'Elements Count Double — 500 🪙'}</button>
           <button data-action="buy" data-kind="jump" ${upgrades.canJump ? 'disabled' : ''}>${upgrades.canJump ? 'Jumping — Owned' : 'Jumping — 100 🪙'}</button>
+          ${
+            upgrades.canJump
+              ? `
+          <button data-action="buy" data-kind="doubleJump" ${upgrades.doubleJump ? 'disabled' : ''}>${upgrades.doubleJump ? 'Double Jump — Owned' : 'Double Jump — 300 🪙'}</button>
+          <button data-action="buy" data-kind="minion" ${upgrades.minion ? 'disabled' : ''}>${upgrades.minion ? 'Minion Helper — Owned' : 'Minion Helper — 500 🪙'}</button>`
+              : ''
+          }
           <button data-action="close-shop">Leave Shop</button>
         </div>`;
     case 'WON': {
@@ -1367,11 +1552,15 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.1);
   const elapsed = clock.getElapsedTime();
 
-  if (gameState === 'PLAYING') {
+  if (gameState === 'PLAYING' || gameState === 'IDLE') {
     updateMovement(delta);
+    checkShopProximity();
+    updatePlayerBody(delta);
+  }
+  if (gameState === 'PLAYING') {
     updateNPCs(delta);
     checkPlayerCollisions();
-    checkShopProximity();
+    updateMinion(delta);
   }
   animateItems(elapsed, delta);
   animateLakeWaves(elapsed);

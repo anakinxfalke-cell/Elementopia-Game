@@ -18,6 +18,7 @@
 
   <div id="top-bar">
     <div id="coin-display">🪙 0</div>
+    <button id="battle-btn" title="Start Battle">⚔️</button>
     <button id="settings-btn" title="Settings">⚙️</button>
     <button id="fullscreen-btn" title="Fullscreen">⛶</button>
   </div>
@@ -29,8 +30,13 @@
 
   <div id="shop-hint" class="hidden">Press E — Shop</div>
 
+  <div id="chat" class="hidden">
+    <div id="chat-log"></div>
+    <input id="chat-input" type="text" maxlength="100" placeholder="Type a message..." autocomplete="off" />
+  </div>
+
   <div id="overlay"></div>
 
-  <script type="module" src="main.js?v=9"></script>
+  <script type="module" src="main.js?v=10"></script>
 </body>
 </html>
