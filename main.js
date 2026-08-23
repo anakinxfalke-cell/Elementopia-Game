@@ -579,7 +579,7 @@ function createTornadoMesh() {
   group.add(sprite);
 
   if (!smokeTexture) smokeTexture = createSmokeTexture();
-  const puffCount = 30;
+  const puffCount = 300;
   const puffs = [];
   for (let i = 0; i < puffCount; i++) {
     const puffMaterial = new THREE.SpriteMaterial({ map: smokeTexture, transparent: true, depthWrite: false });
@@ -590,10 +590,10 @@ function createTornadoMesh() {
     puffs.push({
       sprite: puffSprite,
       angle: Math.random() * Math.PI * 2,
-      radius: 1.5 + Math.random() * 2,
-      orbitSpeed: 0.4 + Math.random() * 0.4,
+      radius: 4 + Math.random() * 5,
+      orbitSpeed: 1.5 + Math.random() * 1.5,
       bobOffset: Math.random() * Math.PI * 2,
-      baseY: 0.3 + Math.random() * 1.2,
+      baseY: Math.random() < 0.7 ? 0.2 + Math.random() * 1.4 : 2 + Math.random() * 8,
     });
   }
 
