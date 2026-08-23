@@ -25,13 +25,22 @@ const SHOP_JUMP_COST = 100;
 const SHOP_DOUBLE_JUMP_COST = 300;
 const SHOP_MINION_COST = 500;
 const SHOP_SWIMMING_COST = 250;
+const TORNADO_SPEED = 1.5;
+const TORNADO_SPIN_SPEED = 3.5;
+const TORNADO_RADIUS = 4;
+const TORNADO_KNOCKBACK_FORCE = 18;
+const TORNADO_KNOCKBACK_COOLDOWN = 1.5;
+let tornado = null;
+const knockbackVelocity = { x: 0, z: 0 };
+
 const GATE_COST = 1000;
 const GATE_X = MAP_HALF_SIZE;
 const GATE_INTERACT_DISTANCE = 4;
 const DESERT_WIDTH = 150;
 let nearGate = false;
 let gateBarrier = null;
-const JUMP_SPEED = 8.5;
+let boundaryWallSegments = [];
+const JUMP_SPEED = 12;
 const GRAVITY = 18;
 
 const TREE_TRUNK_HEIGHT = 0.16;
@@ -244,10 +253,12 @@ async function init() {
   spawnElementHouses();
   spawnGiantTrees();
   spawnGate();
+  spawnBoundaryWall();
   initDesertGround();
   spawnDesertDecor();
   spawnDesertWalls();
   spawnDesertHouses();
+  initTornado();
   initPlayerBody();
   initPointerLock();
   bindKeys();
@@ -484,11 +495,101 @@ function createMinecraftHouse(roofColor) {
   return { group, shopSign };
 }
 
+function spawnBoundaryWall() {
+  if (upgrades.desertGate) return;
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x6b6b6b });
+  const wallHeight = 10;
+  const thickness = 1;
+  const gateHalfWidth = 4;
+  const segmentLength = 20;
+
+  const addRange = (rangeStart, rangeEnd) => {
+    for (let z = rangeStart; z < rangeEnd; z += segmentLength) {
+      const segStart = z;
+      const segEnd = Math.min(z + segmentLength, rangeEnd);
+      const length = segEnd - segStart;
+      if (length <= 0) continue;
+      const centerZ = (segStart + segEnd) / 2;
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(thickness, wallHeight, length), wallMaterial);
+      wall.position.set(MAP_HALF_SIZE, terrainHeight(MAP_HALF_SIZE, centerZ) + wallHeight / 2, centerZ);
+      scene.add(wall);
+      boundaryWallSegments.push(wall);
+    }
+  };
+
+  addRange(-MAP_HALF_SIZE, -gateHalfWidth);
+  addRange(gateHalfWidth, MAP_HALF_SIZE);
+}
+
+function clearBoundaryWall() {
+  for (const segment of boundaryWallSegments) scene.remove(segment);
+  boundaryWallSegments = [];
+}
+
 function spawnGateBarrier() {
   const barrierMaterial = new THREE.MeshStandardMaterial({ color: 0x6b4423 });
   gateBarrier = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 6.5), barrierMaterial);
   gateBarrier.position.set(GATE_X, terrainHeight(GATE_X, 0) + 2.5, 0);
   scene.add(gateBarrier);
+}
+
+function createTornadoMesh() {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, transparent: true, opacity: 0.55 });
+  const segments = 6;
+  for (let i = 0; i < segments; i++) {
+    const t = i / (segments - 1);
+    const radius = THREE.MathUtils.lerp(0.4, 3.5, t);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, 2.4, 12, 1, true), material);
+    cone.position.y = t * 12 + 1.2;
+    group.add(cone);
+  }
+  return group;
+}
+
+function pickTornadoTarget() {
+  const bound = MAP_HALF_SIZE - EDGE_MARGIN;
+  let x, z;
+  do {
+    x = (Math.random() * 2 - 1) * bound;
+    z = (Math.random() * 2 - 1) * bound;
+  } while (isInsideLake(x, z) || isNearHouse(x, z));
+  tornado.targetX = x;
+  tornado.targetZ = z;
+}
+
+function initTornado() {
+  const group = createTornadoMesh();
+  scene.add(group);
+  tornado = { group, targetX: 0, targetZ: 0, lastHitTime: -Infinity };
+  pickTornadoTarget();
+  group.position.set(tornado.targetX, terrainHeight(tornado.targetX, tornado.targetZ), tornado.targetZ);
+  pickTornadoTarget();
+}
+
+function updateTornado(delta, elapsed) {
+  if (!tornado) return;
+  const dx = tornado.targetX - tornado.group.position.x;
+  const dz = tornado.targetZ - tornado.group.position.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 2) {
+    pickTornadoTarget();
+  } else {
+    tornado.group.position.x += (dx / dist) * TORNADO_SPEED * delta;
+    tornado.group.position.z += (dz / dist) * TORNADO_SPEED * delta;
+  }
+  tornado.group.position.y = terrainHeight(tornado.group.position.x, tornado.group.position.z);
+  tornado.group.rotation.y += TORNADO_SPIN_SPEED * delta;
+
+  const distToPlayer = Math.hypot(camera.position.x - tornado.group.position.x, camera.position.z - tornado.group.position.z);
+  if (distToPlayer < TORNADO_RADIUS && elapsed - tornado.lastHitTime > TORNADO_KNOCKBACK_COOLDOWN) {
+    tornado.lastHitTime = elapsed;
+    const nx = (camera.position.x - tornado.group.position.x) / (distToPlayer || 1);
+    const nz = (camera.position.z - tornado.group.position.z) / (distToPlayer || 1);
+    knockbackVelocity.x = nx * TORNADO_KNOCKBACK_FORCE;
+    knockbackVelocity.z = nz * TORNADO_KNOCKBACK_FORCE;
+    playerVerticalVelocity = TORNADO_KNOCKBACK_FORCE * 0.4;
+  }
 }
 
 function spawnGate() {
@@ -537,6 +638,7 @@ function confirmOpenGate() {
   nearGate = false;
   document.getElementById('gate-hint').classList.add('hidden');
   openGateBarrier();
+  clearBoundaryWall();
   closeGateMenu();
 }
 
@@ -836,6 +938,11 @@ function updateMovement(delta) {
   if (step.lengthSq() > 0) step.normalize();
 
   camera.position.addScaledVector(step, getEffectiveMoveSpeed() * delta);
+  camera.position.x += knockbackVelocity.x * delta;
+  camera.position.z += knockbackVelocity.z * delta;
+  knockbackVelocity.x *= 0.9;
+  knockbackVelocity.z *= 0.9;
+
   const maxX = upgrades.desertGate ? MAP_HALF_SIZE + DESERT_WIDTH : MAP_HALF_SIZE;
   camera.position.x = THREE.MathUtils.clamp(camera.position.x, -MAP_HALF_SIZE, maxX);
   camera.position.z = THREE.MathUtils.clamp(camera.position.z, -MAP_HALF_SIZE, MAP_HALF_SIZE);
@@ -845,7 +952,7 @@ function updateMovement(delta) {
   }
   [camera.position.x, camera.position.z] = resolveHouseCollision(camera.position.x, camera.position.z);
 
-  if (upgrades.canJump) {
+  if (upgrades.canJump || playerJumpOffset > 0 || playerVerticalVelocity !== 0) {
     playerVerticalVelocity -= GRAVITY * delta;
     playerJumpOffset += playerVerticalVelocity * delta;
     if (playerJumpOffset <= 0) {
@@ -1521,7 +1628,10 @@ function restartGame() {
   upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false, desertGate: false };
   saveUpgrades();
   refreshCoinDisplay();
-  if (hadGateOpen && !gateBarrier) spawnGateBarrier();
+  if (hadGateOpen && !gateBarrier) {
+    spawnGateBarrier();
+    spawnBoundaryWall();
+  }
   clearNPCs();
   clearMinion();
   for (const item of activeItems) scene.remove(item.object);
@@ -1798,6 +1908,7 @@ function animate() {
     checkShopProximity();
     checkGateProximity();
     updatePlayerBody(delta);
+    updateTornado(delta, elapsed);
   }
   if (gameState === 'PLAYING') {
     updateNPCs(delta);
