@@ -180,6 +180,10 @@ html, body {
   word-break: break-word;
 }
 
+#chat-input-box {
+  width: 100%;
+}
+
 #chat-input {
   -webkit-appearance: none;
   appearance: none;

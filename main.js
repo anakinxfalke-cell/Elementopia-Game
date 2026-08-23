@@ -230,6 +230,7 @@ let playerVerticalVelocity = 0;
 let usedDoubleJump = false;
 let minion = null;
 let playerBody = null;
+let desertSpawnPoint = null;
 const PLAYER_SKIN_COLOR = 0xf0c090;
 const PLAYER_BODY_SCALE = 0.85;
 const LEG_FORWARD_OFFSET = 0.25;
@@ -680,6 +681,12 @@ function checkGateProximity() {
   document.getElementById('gate-hint').classList.toggle('hidden', !nearGate);
 }
 
+function trySetDesertSpawn() {
+  if ((gameState !== 'PLAYING' && gameState !== 'IDLE') || camera.position.x <= MAP_HALF_SIZE) return;
+  desertSpawnPoint = { x: camera.position.x, z: camera.position.z };
+  addChatLine('✨ Desert spawn point set — future battles start here');
+}
+
 function tryOpenGate() {
   if ((gameState !== 'PLAYING' && gameState !== 'IDLE') || !nearGate || upgrades.desertGate) return;
   previousState = gameState;
@@ -910,7 +917,7 @@ function openChat() {
   move.forward = move.backward = move.left = move.right = false;
   if (document.pointerLockElement) document.exitPointerLock();
   const input = document.getElementById('chat-input');
-  document.getElementById('chat').classList.remove('hidden');
+  document.getElementById('chat-input-box').classList.remove('hidden');
   input.value = '';
   requestAnimationFrame(() => input.focus());
 }
@@ -922,7 +929,7 @@ function closeChat(shouldSubmit) {
     if (text && !tryHandleChatCommand(text)) addChatLine(`You: ${text}`);
   }
   chatOpen = false;
-  document.getElementById('chat').classList.add('hidden');
+  document.getElementById('chat-input-box').classList.add('hidden');
   input.blur();
   if (gameState === 'PLAYING' || gameState === 'IDLE') lockPointer();
 }
@@ -970,6 +977,7 @@ function setMoveKey(code, isDown) {
     case 'KeyD': case 'ArrowRight': move.right = isDown; break;
     case 'Space': if (isDown) tryJump(); break;
     case 'KeyE': if (isDown) { tryOpenShop(); tryOpenGate(); } break;
+    case 'KeyB': if (isDown) trySetDesertSpawn(); break;
     case 'Escape':
       if (isDown && gameState === 'SHOP') closeShop();
       else if (isDown && gameState === 'GATE') closeGateMenu();
@@ -1278,14 +1286,22 @@ function spawnItems() {
   }
 }
 
-function findSpawnPosition() {
+function randomRegionPosition() {
+  if (desertSpawnPoint) {
+    const x = MAP_HALF_SIZE + 10 + Math.random() * (DESERT_WIDTH - 20);
+    const z = (Math.random() * 2 - 1) * (MAP_HALF_SIZE - 10);
+    return [x, z];
+  }
   const bound = MAP_HALF_SIZE - EDGE_MARGIN;
+  return [(Math.random() * 2 - 1) * bound, (Math.random() * 2 - 1) * bound];
+}
+
+function findSpawnPosition() {
   let candidate;
   for (let attempt = 0; attempt < 20; attempt++) {
-    const x = (Math.random() * 2 - 1) * bound;
-    const z = (Math.random() * 2 - 1) * bound;
+    const [x, z] = randomRegionPosition();
     candidate = new THREE.Vector3(x, terrainHeight(x, z) + 0.6, z);
-    if (isInsideLake(x, z) || isNearHouse(x, z)) continue;
+    if (!desertSpawnPoint && (isInsideLake(x, z) || isNearHouse(x, z))) continue;
     const tooClose = activeItems.some((item) => item.basePosition.distanceTo(candidate) < MIN_ITEM_SPACING);
     if (!tooClose) return candidate;
   }
@@ -1393,12 +1409,10 @@ function createNPC(typeId) {
   const type = getType(typeId);
   const character = createMinecraftCharacter(type.color);
   const mesh = character.group;
-  const bound = MAP_HALF_SIZE - EDGE_MARGIN;
   let x, z;
   do {
-    x = (Math.random() * 2 - 1) * bound;
-    z = (Math.random() * 2 - 1) * bound;
-  } while (isInsideLake(x, z) || isNearHouse(x, z));
+    [x, z] = randomRegionPosition();
+  } while (!desertSpawnPoint && (isInsideLake(x, z) || isNearHouse(x, z)));
   mesh.position.set(x, terrainHeight(x, z) + NPC_CENTER_OFFSET * NPC_SCALE, z);
   scene.add(mesh);
   return {
@@ -1568,12 +1582,20 @@ function startRound(typeId) {
 
   spawnItems();
 
-  const corner = HOUSE_CORNERS.find((c) => c.typeId === typeId);
-  const toCenter = new THREE.Vector2(-corner.x, -corner.z).normalize();
-  const baseX = corner.x + toCenter.x * 10;
-  const baseZ = corner.z + toCenter.y * 10;
+  let baseX, baseZ, spawnYaw;
+  if (desertSpawnPoint) {
+    baseX = desertSpawnPoint.x;
+    baseZ = desertSpawnPoint.z;
+    spawnYaw = yaw;
+  } else {
+    const corner = HOUSE_CORNERS.find((c) => c.typeId === typeId);
+    const toCenter = new THREE.Vector2(-corner.x, -corner.z).normalize();
+    baseX = corner.x + toCenter.x * 10;
+    baseZ = corner.z + toCenter.y * 10;
+    spawnYaw = Math.atan2(-toCenter.x, -toCenter.y);
+  }
   camera.position.set(baseX, terrainHeight(baseX, baseZ) + EYE_HEIGHT, baseZ);
-  yaw = Math.atan2(-toCenter.x, -toCenter.y);
+  yaw = spawnYaw;
   pitch = 0;
   camera.rotation.set(pitch, yaw, 0, 'YXZ');
 
@@ -1702,6 +1724,7 @@ function restartGame() {
   saveCoins();
   const hadGateOpen = upgrades.desertGate;
   upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false, desertGate: false };
+  desertSpawnPoint = null;
   saveUpgrades();
   refreshCoinDisplay();
   if (hadGateOpen && !gateBarrier) {

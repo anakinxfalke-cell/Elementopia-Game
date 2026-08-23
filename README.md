@@ -36,6 +36,11 @@ Then open http://localhost:8000 in a browser (Chrome/Firefox/Safari).
 - Esc — pause (opens Settings / Restart / Quit)
 - ⚙️ (top-right) — Settings: mouse sensitivity, movement speed, fullscreen
 - ⛶ (top-right) — toggle fullscreen directly
+- T — open chat; Enter to send, Esc to cancel
+- E — interact with a nearby shop or gate
+- B (in the desert only) — set your desert spawn point; once set, future
+  battles start there and their elements spawn in the desert instead of
+  the plains
 
 ## Tech
 
