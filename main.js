@@ -31,7 +31,7 @@ const GATE_INTERACT_DISTANCE = 4;
 const DESERT_WIDTH = 150;
 let nearGate = false;
 let gateBarrier = null;
-const JUMP_SPEED = 6;
+const JUMP_SPEED = 8.5;
 const GRAVITY = 18;
 
 const TREE_TRUNK_HEIGHT = 0.16;
@@ -246,6 +246,8 @@ async function init() {
   spawnGate();
   initDesertGround();
   spawnDesertDecor();
+  spawnDesertWalls();
+  spawnDesertHouses();
   initPlayerBody();
   initPointerLock();
   bindKeys();
@@ -563,6 +565,44 @@ function initDesertGround() {
   ground.rotation.x = -Math.PI / 2;
   ground.position.x = MAP_HALF_SIZE + DESERT_WIDTH / 2;
   scene.add(ground);
+}
+
+function spawnDesertWalls() {
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xb89968 });
+  const wallHeight = 8;
+  const thickness = 1.5;
+  const segmentLength = 20;
+
+  const addWallSegment = (x, z, rotationY) => {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(segmentLength, wallHeight, thickness), wallMaterial);
+    wall.position.set(x, terrainHeight(x, z) + wallHeight / 2, z);
+    wall.rotation.y = rotationY;
+    scene.add(wall);
+  };
+
+  const eastX = MAP_HALF_SIZE + DESERT_WIDTH;
+  for (let z = -MAP_HALF_SIZE + segmentLength / 2; z < MAP_HALF_SIZE; z += segmentLength) {
+    addWallSegment(eastX, z, Math.PI / 2);
+  }
+  for (let x = MAP_HALF_SIZE + segmentLength / 2; x < MAP_HALF_SIZE + DESERT_WIDTH; x += segmentLength) {
+    addWallSegment(x, MAP_HALF_SIZE, 0);
+    addWallSegment(x, -MAP_HALF_SIZE, 0);
+  }
+}
+
+function spawnDesertHouses() {
+  const roofColor = 0xb5651d;
+  const positions = [
+    { x: MAP_HALF_SIZE + 40, z: 40 },
+    { x: MAP_HALF_SIZE + 40, z: -40 },
+    { x: MAP_HALF_SIZE + 100, z: 0 },
+  ];
+  for (const pos of positions) {
+    const { group: house } = createMinecraftHouse(roofColor);
+    house.position.set(pos.x, terrainHeight(pos.x, pos.z), pos.z);
+    house.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(house);
+  }
 }
 
 function spawnDesertDecor() {
