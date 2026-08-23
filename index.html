@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elementopia</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.166.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="top-bar">
+    <div id="coin-display">🪙 0</div>
+    <button id="settings-btn" title="Settings">⚙️</button>
+    <button id="fullscreen-btn" title="Fullscreen">⛶</button>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="player-goal"></div>
+    <div id="opponents"></div>
+  </div>
+
+  <div id="shop-hint" class="hidden">Press E — Shop</div>
+
+  <div id="overlay"></div>
+
+  <script type="module" src="main.js?v=9"></script>
+</body>
+</html>

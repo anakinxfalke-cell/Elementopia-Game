@@ -1,0 +1,212 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#app canvas {
+  display: block;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Top bar: coins + settings + fullscreen, always visible */
+
+#top-bar {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 20;
+}
+
+#coin-display {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+#top-bar button {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#top-bar button:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+/* HUD: player goal + opponents, only while playing */
+
+#hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#player-goal {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 22px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+#opponents {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#opponents div {
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  opacity: 0.85;
+  width: fit-content;
+}
+
+/* Overlay: menus and end-of-round screens */
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.panel {
+  text-align: center;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.55);
+  padding: 32px 40px;
+  border-radius: 16px;
+  max-width: 420px;
+}
+
+.panel h1 {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.panel p {
+  font-size: 15px;
+  margin-bottom: 10px;
+  opacity: 0.9;
+}
+
+.panel button {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 24px;
+  font-size: 16px;
+  border: none;
+  border-radius: 6px;
+  background: #4caf50;
+  color: #fff;
+  cursor: pointer;
+}
+
+.panel button:hover {
+  background: #45a049;
+}
+
+.panel button:disabled {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: default;
+}
+
+#shop-hint {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 16px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.element-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.element-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 12px;
+  font-size: 16px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  margin-top: 0;
+  width: auto;
+}
+
+.element-card:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.element-emoji {
+  font-size: 34px;
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 14px;
+  margin-bottom: 14px;
+  text-align: left;
+}
+
+.settings-row input[type="range"] {
+  width: 100%;
+}
