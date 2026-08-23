@@ -205,6 +205,7 @@ let usedDoubleJump = false;
 let minion = null;
 let playerBody = null;
 const PLAYER_SKIN_COLOR = 0xf0c090;
+const PLAYER_BODY_SCALE = 0.85;
 
 let mouseSensitivity = DEFAULT_MOUSE_SENSITIVITY;
 let moveSpeed = DEFAULT_MOVE_SPEED;
@@ -1065,6 +1066,7 @@ function initPlayerBody() {
   const character = createMinecraftCharacter(PLAYER_SKIN_COLOR);
   character.group.remove(character.head);
   character.group.remove(character.body);
+  character.group.scale.setScalar(PLAYER_BODY_SCALE);
   scene.add(character.group);
   playerBody = { ...character, walkPhase: 0 };
 }
@@ -1073,7 +1075,7 @@ function updatePlayerBody(delta) {
   if (!playerBody) return;
   playerBody.group.position.set(
     camera.position.x,
-    terrainHeight(camera.position.x, camera.position.z) + NPC_CENTER_OFFSET * NPC_SCALE,
+    terrainHeight(camera.position.x, camera.position.z) + NPC_CENTER_OFFSET * PLAYER_BODY_SCALE,
     camera.position.z
   );
   playerBody.group.rotation.y = yaw;
@@ -1198,10 +1200,14 @@ function startRound(typeId) {
 
   spawnItems();
 
-  camera.position.set(0, terrainHeight(0, SPAWN_Z) + EYE_HEIGHT, SPAWN_Z);
-  yaw = 0;
+  const corner = HOUSE_CORNERS.find((c) => c.typeId === typeId);
+  const toCenter = new THREE.Vector2(-corner.x, -corner.z).normalize();
+  const baseX = corner.x + toCenter.x * 10;
+  const baseZ = corner.z + toCenter.y * 10;
+  camera.position.set(baseX, terrainHeight(baseX, baseZ) + EYE_HEIGHT, baseZ);
+  yaw = Math.atan2(-toCenter.x, -toCenter.y);
   pitch = 0;
-  camera.rotation.set(0, 0, 0, 'YXZ');
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
 
   gameState = 'PLAYING';
   updateUI();
@@ -1293,6 +1299,10 @@ function bindTopBar() {
 }
 
 function goToSelect() {
+  if (playerChosenType) {
+    startRound(playerChosenType);
+    return;
+  }
   gameState = 'SELECT';
   if (document.pointerLockElement) document.exitPointerLock();
   updateUI();
@@ -1330,6 +1340,16 @@ function restartGame() {
   playerChosenType = null;
   gameState = 'WELCOME';
   updateUI();
+}
+
+function abandonRound() {
+  clearNPCs();
+  clearMinion();
+  for (const item of activeItems) scene.remove(item.object);
+  activeItems = [];
+  gameState = 'IDLE';
+  updateUI();
+  lockPointer();
 }
 
 function buyUpgrade(kind) {
@@ -1413,6 +1433,9 @@ function handleOverlayAction(action, el) {
     case 'restart-game':
       restartGame();
       break;
+    case 'abandon-round':
+      abandonRound();
+      break;
     case 'quit-game':
       quitGame();
       break;
@@ -1422,8 +1445,7 @@ function handleOverlayAction(action, el) {
       break;
     case 'next-round':
     case 'retry':
-      gameState = 'SELECT';
-      updateUI();
+      startRound(playerChosenType);
       break;
     case 'reopen':
       gameState = 'WELCOME';
@@ -1476,6 +1498,7 @@ function renderOverlayContent() {
         <div class="panel">
           <h1>Paused</h1>
           <button data-action="resume">Resume</button>
+          ${previousState === 'PLAYING' ? '<button data-action="abandon-round">Stop Battle</button>' : ''}
           <button data-action="open-settings">Settings</button>
           <button data-action="restart-game">Restart Game</button>
           <button data-action="quit-game">Quit</button>
