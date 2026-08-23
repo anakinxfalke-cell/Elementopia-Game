@@ -928,14 +928,24 @@ function closeChat(shouldSubmit) {
 }
 
 function tryHandleChatCommand(text) {
-  const match = text.match(/^\/player give coins\/:\/(\d+)\/:\/coins\/$/);
-  if (!match) return false;
-  const amount = parseInt(match[1], 10);
-  coins += amount;
-  saveCoins();
-  refreshCoinDisplay();
-  addChatLine(`✨ +${amount} 🪙`);
-  return true;
+  const coinsMatch = text.match(/^\/player give coins\/:\/(\d+)\/:\/coins\/$/);
+  if (coinsMatch) {
+    const amount = parseInt(coinsMatch[1], 10);
+    coins += amount;
+    saveCoins();
+    refreshCoinDisplay();
+    addChatLine(`✨ +${amount} 🪙`);
+    return true;
+  }
+
+  const speedMatch = text.match(/^\/set speed\/:\/(\d+)\/:\/$/);
+  if (speedMatch) {
+    moveSpeed = parseInt(speedMatch[1], 10);
+    addChatLine(`✨ Speed set to ${moveSpeed}`);
+    return true;
+  }
+
+  return false;
 }
 
 function submitChat() {
