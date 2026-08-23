@@ -25,6 +25,12 @@ const SHOP_JUMP_COST = 100;
 const SHOP_DOUBLE_JUMP_COST = 300;
 const SHOP_MINION_COST = 500;
 const SHOP_SWIMMING_COST = 250;
+const GATE_COST = 1000;
+const GATE_X = MAP_HALF_SIZE;
+const GATE_INTERACT_DISTANCE = 4;
+const DESERT_WIDTH = 150;
+let nearGate = false;
+let gateBarrier = null;
 const JUMP_SPEED = 6;
 const GRAVITY = 18;
 
@@ -66,7 +72,13 @@ function smoothstep(t) {
   return t * t * (3 - 2 * t);
 }
 
+function desertTerrainHeight(x, z) {
+  return Math.sin(x * 0.04) * Math.cos(z * 0.05) * 1.2 + Math.sin(x * 0.1 + z * 0.08) * 0.4;
+}
+
 function terrainHeight(x, z) {
+  if (x > MAP_HALF_SIZE) return desertTerrainHeight(x, z);
+
   const dist = Math.hypot(x, z);
   const blendEnd = LAKE_RADIUS + LAKE_SHORE_WIDTH;
 
@@ -207,6 +219,7 @@ let minion = null;
 let playerBody = null;
 const PLAYER_SKIN_COLOR = 0xf0c090;
 const PLAYER_BODY_SCALE = 0.85;
+const LEG_FORWARD_OFFSET = 0.25;
 
 let mouseSensitivity = DEFAULT_MOUSE_SENSITIVITY;
 let moveSpeed = DEFAULT_MOVE_SPEED;
@@ -230,6 +243,9 @@ async function init() {
   initLake();
   spawnElementHouses();
   spawnGiantTrees();
+  spawnGate();
+  initDesertGround();
+  spawnDesertDecor();
   initPlayerBody();
   initPointerLock();
   bindKeys();
@@ -466,6 +482,110 @@ function createMinecraftHouse(roofColor) {
   return { group, shopSign };
 }
 
+function spawnGateBarrier() {
+  const barrierMaterial = new THREE.MeshStandardMaterial({ color: 0x6b4423 });
+  gateBarrier = new THREE.Mesh(new THREE.BoxGeometry(0.5, 5, 6.5), barrierMaterial);
+  gateBarrier.position.set(GATE_X, terrainHeight(GATE_X, 0) + 2.5, 0);
+  scene.add(gateBarrier);
+}
+
+function spawnGate() {
+  const stoneMaterial = new THREE.MeshStandardMaterial({ color: 0x8d8d8d });
+  const pillarGeometry = new THREE.BoxGeometry(1.2, 6, 1.2);
+  for (const z of [-3.5, 3.5]) {
+    const pillar = new THREE.Mesh(pillarGeometry, stoneMaterial);
+    pillar.position.set(GATE_X, terrainHeight(GATE_X, z) + 3, z);
+    scene.add(pillar);
+  }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 8), stoneMaterial);
+  lintel.position.set(GATE_X, terrainHeight(GATE_X, 0) + 6.2, 0);
+  scene.add(lintel);
+
+  if (!upgrades.desertGate) spawnGateBarrier();
+}
+
+function openGateBarrier() {
+  if (gateBarrier) {
+    scene.remove(gateBarrier);
+    gateBarrier = null;
+  }
+}
+
+function checkGateProximity() {
+  const dist = Math.hypot(camera.position.x - GATE_X, camera.position.z);
+  nearGate = !upgrades.desertGate && dist < GATE_INTERACT_DISTANCE;
+  document.getElementById('gate-hint').classList.toggle('hidden', !nearGate);
+}
+
+function tryOpenGate() {
+  if ((gameState !== 'PLAYING' && gameState !== 'IDLE') || !nearGate || upgrades.desertGate) return;
+  if (coins < GATE_COST) return;
+  coins -= GATE_COST;
+  upgrades.desertGate = true;
+  saveCoins();
+  saveUpgrades();
+  refreshCoinDisplay();
+  nearGate = false;
+  document.getElementById('gate-hint').classList.add('hidden');
+  openGateBarrier();
+}
+
+function createCactus() {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: 0x4f7942 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 2.2, 8), material);
+  trunk.position.y = 1.1;
+  group.add(trunk);
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 1, 8), material);
+    arm.position.set(side * 0.35, 1.3, 0);
+    arm.rotation.z = side * 0.5;
+    group.add(arm);
+  }
+  return group;
+}
+
+function initDesertGround() {
+  const segments = 60;
+  const geometry = new THREE.PlaneGeometry(DESERT_WIDTH, MAP_HALF_SIZE * 2, segments, segments);
+  const position = geometry.attributes.position;
+  for (let i = 0; i < position.count; i++) {
+    const localX = position.getX(i);
+    const localY = position.getY(i);
+    const worldX = MAP_HALF_SIZE + DESERT_WIDTH / 2 + localX;
+    const worldZ = -localY;
+    position.setZ(i, terrainHeight(worldX, worldZ));
+  }
+  geometry.computeVertexNormals();
+
+  const material = new THREE.MeshStandardMaterial({ color: 0xdcc07a });
+  const ground = new THREE.Mesh(geometry, material);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.x = MAP_HALF_SIZE + DESERT_WIDTH / 2;
+  scene.add(ground);
+}
+
+function spawnDesertDecor() {
+  for (let i = 0; i < 30; i++) {
+    const x = MAP_HALF_SIZE + 8 + Math.random() * (DESERT_WIDTH - 16);
+    const z = (Math.random() * 2 - 1) * (MAP_HALF_SIZE - 5);
+    const cactus = createCactus();
+    cactus.position.set(x, terrainHeight(x, z), z);
+    cactus.rotation.y = Math.random() * Math.PI * 2;
+    cactus.scale.setScalar(0.8 + Math.random() * 0.6);
+    scene.add(cactus);
+  }
+  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x9c8060 });
+  for (let i = 0; i < 15; i++) {
+    const x = MAP_HALF_SIZE + 8 + Math.random() * (DESERT_WIDTH - 16);
+    const z = (Math.random() * 2 - 1) * (MAP_HALF_SIZE - 5);
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6 + Math.random() * 0.8), rockMaterial);
+    rock.position.set(x, terrainHeight(x, z), z);
+    rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    scene.add(rock);
+  }
+}
+
 function spawnElementHouses() {
   for (const corner of HOUSE_CORNERS) {
     const type = getType(corner.typeId);
@@ -623,7 +743,7 @@ function setMoveKey(code, isDown) {
     case 'KeyA': case 'ArrowLeft': move.left = isDown; break;
     case 'KeyD': case 'ArrowRight': move.right = isDown; break;
     case 'Space': if (isDown) tryJump(); break;
-    case 'KeyE': if (isDown) tryOpenShop(); break;
+    case 'KeyE': if (isDown) { tryOpenShop(); tryOpenGate(); } break;
     case 'Escape': if (isDown && gameState === 'SHOP') closeShop(); break;
   }
 }
@@ -659,7 +779,8 @@ function updateMovement(delta) {
   if (step.lengthSq() > 0) step.normalize();
 
   camera.position.addScaledVector(step, getEffectiveMoveSpeed() * delta);
-  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -MAP_HALF_SIZE, MAP_HALF_SIZE);
+  const maxX = upgrades.desertGate ? MAP_HALF_SIZE + DESERT_WIDTH : MAP_HALF_SIZE;
+  camera.position.x = THREE.MathUtils.clamp(camera.position.x, -MAP_HALF_SIZE, maxX);
   camera.position.z = THREE.MathUtils.clamp(camera.position.z, -MAP_HALF_SIZE, MAP_HALF_SIZE);
   const canSwim = upgrades.swimming && playerChosenType === 'water';
   if (!canSwim) {
@@ -1082,11 +1203,9 @@ function initPlayerBody() {
 
 function updatePlayerBody(delta) {
   if (!playerBody) return;
-  playerBody.group.position.set(
-    camera.position.x,
-    terrainHeight(camera.position.x, camera.position.z) + NPC_CENTER_OFFSET * PLAYER_BODY_SCALE,
-    camera.position.z
-  );
+  const x = camera.position.x - Math.sin(yaw) * LEG_FORWARD_OFFSET;
+  const z = camera.position.z - Math.cos(yaw) * LEG_FORWARD_OFFSET;
+  playerBody.group.position.set(x, terrainHeight(x, z) + NPC_CENTER_OFFSET * PLAYER_BODY_SCALE, z);
   playerBody.group.rotation.y = yaw;
 
   const isMoving = move.forward || move.backward || move.left || move.right;
@@ -1122,7 +1241,7 @@ function updateMinion(delta) {
     setNPCWalkPose(minion, 0);
     removeItem(minion.targetItem);
     minion.targetItem = null;
-    playerRemaining = Math.max(0, playerRemaining - (upgrades.doubleElement ? 2 : 1));
+    playerRemaining = Math.max(0, playerRemaining - 1);
     updateHUD();
     if (playerRemaining === 0) triggerRoundWon();
   } else {
@@ -1261,9 +1380,10 @@ function loadUpgrades() {
       doubleJump: Boolean(parsed?.doubleJump),
       minion: Boolean(parsed?.minion),
       swimming: Boolean(parsed?.swimming),
+      desertGate: Boolean(parsed?.desertGate),
     };
   } catch {
-    return { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false };
+    return { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false, desertGate: false };
   }
 }
 
@@ -1340,9 +1460,11 @@ function restartGame() {
   if (!confirm('Restart the game? This resets your coins and shop upgrades.')) return;
   coins = 0;
   saveCoins();
-  upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false };
+  const hadGateOpen = upgrades.desertGate;
+  upgrades = { speedBoostLevel: 0, doubleElement: false, canJump: false, doubleJump: false, minion: false, swimming: false, desertGate: false };
   saveUpgrades();
   refreshCoinDisplay();
+  if (hadGateOpen && !gateBarrier) spawnGateBarrier();
   clearNPCs();
   clearMinion();
   for (const item of activeItems) scene.remove(item.object);
@@ -1461,6 +1583,9 @@ function handleOverlayAction(action, el) {
     case 'retry':
       startRound(playerChosenType);
       break;
+    case 'go-explore':
+      abandonRound();
+      break;
     case 'reopen':
       gameState = 'WELCOME';
       running = true;
@@ -1562,6 +1687,7 @@ function renderOverlayContent() {
           <p>You collected all the ${type.emoji} ${type.label}!</p>
           <p>+100 coins — total: 🪙 ${coins}</p>
           <button data-action="next-round">Next Round</button>
+          <button data-action="go-explore">Explore</button>
         </div>`;
     }
     case 'LOST': {
@@ -1571,6 +1697,7 @@ function renderOverlayContent() {
           <h1>Round Lost</h1>
           <p>A rival collected all the ${type.emoji} ${type.label} first!</p>
           <button data-action="retry">Try Again</button>
+          <button data-action="go-explore">Explore</button>
         </div>`;
     }
     case 'QUIT':
@@ -1597,6 +1724,7 @@ function animate() {
   if (gameState === 'PLAYING' || gameState === 'IDLE') {
     updateMovement(delta);
     checkShopProximity();
+    checkGateProximity();
     updatePlayerBody(delta);
   }
   if (gameState === 'PLAYING') {

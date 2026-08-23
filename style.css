@@ -194,7 +194,8 @@ html, body {
   outline: none;
 }
 
-#shop-hint {
+#shop-hint,
+#gate-hint {
   position: fixed;
   bottom: 60px;
   left: 50%;
