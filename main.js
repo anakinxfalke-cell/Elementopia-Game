@@ -31,6 +31,7 @@ const TORNADO_DETECT_RADIUS = 30;
 const TORNADO_RADIUS = 4;
 const TORNADO_KNOCKBACK_FORCE = 60;
 const TORNADO_KNOCKBACK_COOLDOWN = 1.5;
+const TORNADO_TEXTURE_SPIN_SPEED = 0.35;
 let tornado = null;
 let tornadoTexture = null;
 let smokeTexture;
@@ -542,13 +543,19 @@ async function loadTornadoTexture() {
   const img = await loadImage('assets/tornado.svg');
   const size = 256;
   const canvas = document.createElement('canvas');
-  canvas.width = size;
+  canvas.width = size * 2;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
+  // Drawn twice side by side so a horizontally-scrolling UV offset wraps
+  // seamlessly, faking a "spinning around the vertical axis" look on what
+  // is actually a flat camera-facing billboard.
   ctx.drawImage(img, 0, 0, size, size);
+  ctx.drawImage(img, size, 0, size, size);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.repeat.x = 0.5;
   return texture;
 }
 
@@ -651,6 +658,7 @@ function updateTornado(delta, elapsed) {
   }
   tornado.group.position.y = terrainHeight(tornado.group.position.x, tornado.group.position.z);
   tornado.sprite.position.y = 8 + Math.sin(elapsed * 1.2) * 0.8;
+  tornado.sprite.material.map.offset.x = (tornado.sprite.material.map.offset.x + TORNADO_TEXTURE_SPIN_SPEED * delta) % 1;
 
   for (const puff of tornado.puffs) {
     puff.angle += puff.orbitSpeed * delta;
