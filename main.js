@@ -19,6 +19,7 @@ const DEFAULT_MOVE_SPEED = 12;
 const COINS_KEY = 'elementopia_coins';
 const UPGRADES_KEY = 'elementopia_upgrades';
 const SHOP_SPEED_BOOST_COST = 200;
+const SHOP_SPEED_BOOST_MAX_LEVEL = 10;
 const SHOP_SPEED_BOOST_MULTIPLIER = 1.1;
 const SHOP_DOUBLE_ELEMENT_COST = 500;
 const SHOP_JUMP_COST = 100;
@@ -1718,7 +1719,7 @@ function abandonRound() {
 
 function buyUpgrade(kind) {
   if (kind === 'speed') {
-    if (coins < SHOP_SPEED_BOOST_COST) return;
+    if (upgrades.speedBoostLevel >= SHOP_SPEED_BOOST_MAX_LEVEL || coins < SHOP_SPEED_BOOST_COST) return;
     coins -= SHOP_SPEED_BOOST_COST;
     upgrades.speedBoostLevel++;
   } else if (kind === 'double') {
@@ -1900,7 +1901,7 @@ function renderOverlayContent() {
         <div class="panel">
           <h1>Shop</h1>
           <p>🪙 ${coins}</p>
-          <button data-action="buy" data-kind="speed">+10% Speed — 200 🪙 (Lv. ${upgrades.speedBoostLevel})</button>
+          <button data-action="buy" data-kind="speed" ${upgrades.speedBoostLevel >= SHOP_SPEED_BOOST_MAX_LEVEL ? 'disabled' : ''}>${upgrades.speedBoostLevel >= SHOP_SPEED_BOOST_MAX_LEVEL ? `+10% Speed — Max (Lv. ${upgrades.speedBoostLevel})` : `+10% Speed — 200 🪙 (Lv. ${upgrades.speedBoostLevel})`}</button>
           <button data-action="buy" data-kind="double" ${upgrades.doubleElement ? 'disabled' : ''}>${upgrades.doubleElement ? 'Elements Count Double — Owned' : 'Elements Count Double — 500 🪙'}</button>
           <button data-action="buy" data-kind="jump" ${upgrades.canJump ? 'disabled' : ''}>${upgrades.canJump ? 'Jumping — Owned' : 'Jumping — 100 🪙'}</button>
           ${
