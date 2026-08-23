@@ -231,6 +231,8 @@ let usedDoubleJump = false;
 let minion = null;
 let playerBody = null;
 let desertSpawnPoint = null;
+let tornadoCapture = null;
+const TORNADO_CAPTURE_DURATION = 1.3;
 const PLAYER_SKIN_COLOR = 0xf0c090;
 const PLAYER_BODY_SCALE = 0.85;
 const LEG_FORWARD_OFFSET = 0.25;
@@ -643,13 +645,13 @@ function updateTornado(delta, elapsed) {
     );
   }
 
-  if (distToPlayerXZ < TORNADO_RADIUS && elapsed - tornado.lastHitTime > TORNADO_KNOCKBACK_COOLDOWN) {
+  if (distToPlayerXZ < TORNADO_RADIUS && !tornadoCapture && elapsed - tornado.lastHitTime > TORNADO_KNOCKBACK_COOLDOWN) {
     tornado.lastHitTime = elapsed;
-    const nx = (camera.position.x - tornado.group.position.x) / (distToPlayerXZ || 1);
-    const nz = (camera.position.z - tornado.group.position.z) / (distToPlayerXZ || 1);
-    knockbackVelocity.x = nx * TORNADO_KNOCKBACK_FORCE;
-    knockbackVelocity.z = nz * TORNADO_KNOCKBACK_FORCE;
-    playerVerticalVelocity = TORNADO_KNOCKBACK_FORCE * 0.4;
+    tornadoCapture = {
+      timer: 0,
+      angle: Math.atan2(camera.position.z - tornado.group.position.z, camera.position.x - tornado.group.position.x),
+      startRadius: Math.max(distToPlayerXZ, 0.5),
+    };
   }
 }
 
@@ -1004,7 +1006,32 @@ function checkShopProximity() {
   document.getElementById('shop-hint').classList.toggle('hidden', !nearShop);
 }
 
+function updateTornadoCapture(delta) {
+  tornadoCapture.timer += delta;
+  const t = Math.min(tornadoCapture.timer / TORNADO_CAPTURE_DURATION, 1);
+  tornadoCapture.angle += (4 + t * 10) * delta;
+  const radius = THREE.MathUtils.lerp(tornadoCapture.startRadius, 1.5, t);
+  const height = THREE.MathUtils.lerp(0, 10, t);
+  const x = tornado.group.position.x + Math.cos(tornadoCapture.angle) * radius;
+  const z = tornado.group.position.z + Math.sin(tornadoCapture.angle) * radius;
+  camera.position.set(x, terrainHeight(x, z) + EYE_HEIGHT + height, z);
+
+  if (tornadoCapture.timer >= TORNADO_CAPTURE_DURATION) {
+    const launchAngle = Math.random() * Math.PI * 2;
+    knockbackVelocity.x = Math.cos(launchAngle) * TORNADO_KNOCKBACK_FORCE;
+    knockbackVelocity.z = Math.sin(launchAngle) * TORNADO_KNOCKBACK_FORCE;
+    playerVerticalVelocity = TORNADO_KNOCKBACK_FORCE * 0.4;
+    playerJumpOffset = height;
+    tornadoCapture = null;
+  }
+}
+
 function updateMovement(delta) {
+  if (tornadoCapture) {
+    updateTornadoCapture(delta);
+    return;
+  }
+
   const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, yaw, 0));
   const right = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, yaw, 0));
   const moveZ = Number(move.forward) - Number(move.backward);
