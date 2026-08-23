@@ -25,8 +25,8 @@ const SHOP_JUMP_COST = 100;
 const SHOP_DOUBLE_JUMP_COST = 300;
 const SHOP_MINION_COST = 500;
 const SHOP_SWIMMING_COST = 250;
-const TORNADO_SPEED = 1.5;
-const TORNADO_CHASE_SPEED = 4.5;
+const TORNADO_SPEED = 3;
+const TORNADO_CHASE_SPEED = 7;
 const TORNADO_DETECT_RADIUS = 30;
 const TORNADO_SPIN_SPEED = 3.5;
 const TORNADO_RADIUS = 4;
@@ -537,18 +537,18 @@ function spawnGateBarrier() {
   scene.add(gateBarrier);
 }
 
-function loadTornadoTexture() {
-  return new Promise((resolve, reject) => {
-    new THREE.TextureLoader().load(
-      'assets/tornado.png',
-      (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        resolve(texture);
-      },
-      undefined,
-      reject
-    );
-  });
+async function loadTornadoTexture() {
+  const img = await loadImage('assets/tornado.svg');
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, size, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 function createTornadoMesh() {
