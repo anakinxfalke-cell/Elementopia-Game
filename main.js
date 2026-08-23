@@ -521,6 +521,13 @@ function checkGateProximity() {
 
 function tryOpenGate() {
   if ((gameState !== 'PLAYING' && gameState !== 'IDLE') || !nearGate || upgrades.desertGate) return;
+  previousState = gameState;
+  gameState = 'GATE';
+  if (document.pointerLockElement) document.exitPointerLock();
+  updateUI();
+}
+
+function confirmOpenGate() {
   if (coins < GATE_COST) return;
   coins -= GATE_COST;
   upgrades.desertGate = true;
@@ -530,6 +537,13 @@ function tryOpenGate() {
   nearGate = false;
   document.getElementById('gate-hint').classList.add('hidden');
   openGateBarrier();
+  closeGateMenu();
+}
+
+function closeGateMenu() {
+  gameState = previousState === 'IDLE' ? 'IDLE' : 'PLAYING';
+  updateUI();
+  lockPointer();
 }
 
 function createCactus() {
@@ -784,7 +798,10 @@ function setMoveKey(code, isDown) {
     case 'KeyD': case 'ArrowRight': move.right = isDown; break;
     case 'Space': if (isDown) tryJump(); break;
     case 'KeyE': if (isDown) { tryOpenShop(); tryOpenGate(); } break;
-    case 'Escape': if (isDown && gameState === 'SHOP') closeShop(); break;
+    case 'Escape':
+      if (isDown && gameState === 'SHOP') closeShop();
+      else if (isDown && gameState === 'GATE') closeGateMenu();
+      break;
   }
 }
 
@@ -1635,6 +1652,12 @@ function handleOverlayAction(action, el) {
     case 'buy':
       buyUpgrade(el.dataset.kind);
       break;
+    case 'confirm-gate':
+      confirmOpenGate();
+      break;
+    case 'cancel-gate':
+      closeGateMenu();
+      break;
     case 'close-shop':
       closeShop();
       break;
@@ -1718,6 +1741,15 @@ function renderOverlayContent() {
               : ''
           }
           <button data-action="close-shop">Leave Shop</button>
+        </div>`;
+    case 'GATE':
+      return `
+        <div class="panel">
+          <h1>Desert Gate</h1>
+          <p>Beyond here lies a vast desert. Spend 1000 🪙 to open the gate?</p>
+          <p>🪙 ${coins}</p>
+          <button data-action="confirm-gate" ${coins < GATE_COST ? 'disabled' : ''}>${coins < GATE_COST ? 'Not enough coins' : `Open Gate — ${GATE_COST} 🪙`}</button>
+          <button data-action="cancel-gate">Cancel</button>
         </div>`;
     case 'WON': {
       const type = getType(playerChosenType);
