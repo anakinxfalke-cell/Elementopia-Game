@@ -651,6 +651,7 @@ function updateTornado(delta, elapsed) {
   }
   tornado.group.position.y = terrainHeight(tornado.group.position.x, tornado.group.position.z);
   tornado.sprite.position.y = 8 + Math.sin(elapsed * 1.2) * 0.8;
+  tornado.sprite.material.opacity = 0.55 + Math.sin(elapsed * 0.8) * 0.35;
 
   for (const puff of tornado.puffs) {
     puff.angle += puff.orbitSpeed * delta;
