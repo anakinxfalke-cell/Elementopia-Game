@@ -26,11 +26,14 @@ const SHOP_DOUBLE_JUMP_COST = 300;
 const SHOP_MINION_COST = 500;
 const SHOP_SWIMMING_COST = 250;
 const TORNADO_SPEED = 1.5;
+const TORNADO_CHASE_SPEED = 4.5;
+const TORNADO_DETECT_RADIUS = 30;
 const TORNADO_SPIN_SPEED = 3.5;
 const TORNADO_RADIUS = 4;
-const TORNADO_KNOCKBACK_FORCE = 18;
+const TORNADO_KNOCKBACK_FORCE = 42;
 const TORNADO_KNOCKBACK_COOLDOWN = 1.5;
 let tornado = null;
+let tornadoTexture = null;
 const knockbackVelocity = { x: 0, z: 0 };
 
 const GATE_COST = 1000;
@@ -247,6 +250,7 @@ async function init() {
   flameTexture = await loadFlameTexture();
   waterTexture = await loadWaterTexture();
   waveTexture = await loadWaveTexture();
+  tornadoTexture = await loadTornadoTexture();
 
   initGround();
   initLake();
@@ -533,18 +537,30 @@ function spawnGateBarrier() {
   scene.add(gateBarrier);
 }
 
+function loadTornadoTexture() {
+  return new Promise((resolve, reject) => {
+    new THREE.TextureLoader().load(
+      'assets/tornado.png',
+      (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        resolve(texture);
+      },
+      undefined,
+      reject
+    );
+  });
+}
+
 function createTornadoMesh() {
+  const material = new THREE.SpriteMaterial({ map: tornadoTexture, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(material);
+  const aspect = tornadoTexture.image.width / tornadoTexture.image.height;
+  const spriteHeight = 16;
+  sprite.scale.set(spriteHeight * aspect, spriteHeight, 1);
+  sprite.position.y = spriteHeight / 2;
   const group = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, transparent: true, opacity: 0.55 });
-  const segments = 6;
-  for (let i = 0; i < segments; i++) {
-    const t = i / (segments - 1);
-    const radius = THREE.MathUtils.lerp(0.4, 3.5, t);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, 2.4, 12, 1, true), material);
-    cone.position.y = t * 12 + 1.2;
-    group.add(cone);
-  }
-  return group;
+  group.add(sprite);
+  return { group, sprite };
 }
 
 function pickTornadoTarget() {
@@ -559,9 +575,9 @@ function pickTornadoTarget() {
 }
 
 function initTornado() {
-  const group = createTornadoMesh();
+  const { group, sprite } = createTornadoMesh();
   scene.add(group);
-  tornado = { group, targetX: 0, targetZ: 0, lastHitTime: -Infinity };
+  tornado = { group, sprite, targetX: 0, targetZ: 0, lastHitTime: -Infinity };
   pickTornadoTarget();
   group.position.set(tornado.targetX, terrainHeight(tornado.targetX, tornado.targetZ), tornado.targetZ);
   pickTornadoTarget();
@@ -569,23 +585,31 @@ function initTornado() {
 
 function updateTornado(delta, elapsed) {
   if (!tornado) return;
-  const dx = tornado.targetX - tornado.group.position.x;
-  const dz = tornado.targetZ - tornado.group.position.z;
+
+  const distToPlayerXZ = Math.hypot(camera.position.x - tornado.group.position.x, camera.position.z - tornado.group.position.z);
+  const playerGrounded = playerJumpOffset <= 0;
+  const isChasing = playerGrounded && distToPlayerXZ < TORNADO_DETECT_RADIUS;
+
+  const targetX = isChasing ? camera.position.x : tornado.targetX;
+  const targetZ = isChasing ? camera.position.z : tornado.targetZ;
+  const speed = isChasing ? TORNADO_CHASE_SPEED : TORNADO_SPEED;
+
+  const dx = targetX - tornado.group.position.x;
+  const dz = targetZ - tornado.group.position.z;
   const dist = Math.hypot(dx, dz);
-  if (dist < 2) {
+  if (!isChasing && dist < 2) {
     pickTornadoTarget();
-  } else {
-    tornado.group.position.x += (dx / dist) * TORNADO_SPEED * delta;
-    tornado.group.position.z += (dz / dist) * TORNADO_SPEED * delta;
+  } else if (dist > 0.1) {
+    tornado.group.position.x += (dx / dist) * speed * delta;
+    tornado.group.position.z += (dz / dist) * speed * delta;
   }
   tornado.group.position.y = terrainHeight(tornado.group.position.x, tornado.group.position.z);
-  tornado.group.rotation.y += TORNADO_SPIN_SPEED * delta;
+  tornado.sprite.material.rotation += TORNADO_SPIN_SPEED * delta;
 
-  const distToPlayer = Math.hypot(camera.position.x - tornado.group.position.x, camera.position.z - tornado.group.position.z);
-  if (distToPlayer < TORNADO_RADIUS && elapsed - tornado.lastHitTime > TORNADO_KNOCKBACK_COOLDOWN) {
+  if (distToPlayerXZ < TORNADO_RADIUS && elapsed - tornado.lastHitTime > TORNADO_KNOCKBACK_COOLDOWN) {
     tornado.lastHitTime = elapsed;
-    const nx = (camera.position.x - tornado.group.position.x) / (distToPlayer || 1);
-    const nz = (camera.position.z - tornado.group.position.z) / (distToPlayer || 1);
+    const nx = (camera.position.x - tornado.group.position.x) / (distToPlayerXZ || 1);
+    const nz = (camera.position.z - tornado.group.position.z) / (distToPlayerXZ || 1);
     knockbackVelocity.x = nx * TORNADO_KNOCKBACK_FORCE;
     knockbackVelocity.z = nz * TORNADO_KNOCKBACK_FORCE;
     playerVerticalVelocity = TORNADO_KNOCKBACK_FORCE * 0.4;
@@ -1369,7 +1393,7 @@ function updatePlayerBody(delta) {
   if (!playerBody) return;
   const x = camera.position.x - Math.sin(yaw) * LEG_FORWARD_OFFSET;
   const z = camera.position.z - Math.cos(yaw) * LEG_FORWARD_OFFSET;
-  playerBody.group.position.set(x, terrainHeight(x, z) + NPC_CENTER_OFFSET * PLAYER_BODY_SCALE, z);
+  playerBody.group.position.set(x, terrainHeight(x, z) + NPC_CENTER_OFFSET * PLAYER_BODY_SCALE + playerJumpOffset, z);
   playerBody.group.rotation.y = yaw;
 
   const isMoving = move.forward || move.backward || move.left || move.right;
